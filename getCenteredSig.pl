@@ -1,0 +1,149 @@
+#!/usr/bin/env perl
+###################################
+# Author: Jiang Li
+# Email: riverlee2008@gmail.com
+# Date: Wed Jul 24 11:09:08 2013
+###################################
+use strict;
+use warnings;
+use Getopt::Long;
+
+# Given a bed format file (alignment) and center position file (chr\t pos).
+# Get the signal around this center
+#
+
+my ($alnfile,$centerfile,$output,$extend,$window,$normalized)=("","","",8000,10,1);
+my $help=0;
+
+unless(GetOptions("a=s"=>\$alnfile,
+           "c=s"=>\$centerfile,
+           "o=s"=>\$output,
+           "e=i"=>\$extend,
+           "w=i"=>\$window,
+           "n=i"=>\$normalized,
+           "h"=>\$help)){
+    help();
+    die $!;
+ }
+
+help(1) if ($help);
+help(1) if($alnfile eq "" && $centerfile eq "" && $output eq "");
+die ("$alnfile not exists\n") if(! -e $alnfile);
+die ("$centerfile not exists\n") if(! -e $centerfile);
+
+
+my %aln;
+
+# First read the center file and store the position to aln
+info("Initialize the signal matrix ...");
+open(FIRST,$centerfile) or die $!;
+while(<FIRST>){
+    s/\r|\n//g;
+    my($chr,$center) = split "\t";
+    $chr=~s/chr//g;  #remove chr
+    my $extend_start = $center-$extend/2;
+    my $extend_end = $extend_start+$extend;
+    
+    # using a 10bp window to get the signal for each of this 10bp region across the 8kb region.
+    for(my $i=$extend_start;$i<$extend_end;$i++){
+        #calculate the signal
+        $aln{$chr}->{$i}=0;
+    }
+}
+close FIRST;
+
+#Load alignment
+info("Load alignment");
+open(IN,"$alnfile") or die $!;
+my $totalreads=0;
+
+while(<IN>){
+    s/\r|\n//g;
+    $totalreads++;
+    unless($totalreads %10000){
+        info("Reading $totalreads");
+    }
+    
+    my($chr,$start,$end) = split "\t";
+    $chr=~s/chr//g;  #remove chr
+    ($start,$end)=sort {$a<=>$b} ($start,$end); #in case $end < $start
+    for (my $i=$start;$i<=$end;$i++){
+        $aln{$chr}->{$i}++ if(exists($aln{$chr}->{$i}));  #the depth for each base
+    }
+}
+close IN;
+
+
+# read the peak region
+my @signal;
+my $index=0;
+open(PEAK,$centerfile) or die $!;
+info("Loading peakfile '$centerfile' and calculate the signal matrix");
+while(<PEAK>){
+    s/\r|\n//g;
+    my($chr,$center) = split "\t";
+    $chr=~s/chr//g;  #remove chr
+    info("Doing $index ");
+   
+    my $extend_start = $center-$extend/2;
+    my $extend_end = $extend_start+$extend;
+    
+    # using a 10bp window to get the signal for each of this 10bp region across the 8kb region.
+    for(my $i=$extend_start;$i<$extend_end;$i+=$window){
+        #calculate the signal
+        my $intensity=0;
+        for (my $j=$i;$j<$i+$window;$j++){
+            if(exists($aln{$chr}->{$j})){
+                $intensity+=$aln{$chr}->{$j};
+            }
+        }
+        $intensity=$intensity/$window;
+        if($normalized){
+            $intensity=($intensity/$totalreads)*1e9
+        }
+        push @{$signal[$index]->{'regions'}}, {'signal'=>$intensity};
+        #push @{$signal[$index]}
+    }
+    $index++;
+}
+close PEAK;
+
+#Write out
+info("Write out signal matrix");
+open(OUT,">$output") or die $!;
+for(my $i=0;$i<@signal;$i++){
+    my $jj=$i+1;
+    print OUT "peak${jj}";
+    for (my $j=0;$j<@{$signal[$i]->{'regions'}};$j++){
+       print OUT "\t",$signal[$i]->{'regions'}->[$j]->{'signal'};
+    }
+    print OUT "\n";
+}
+
+close OUT;
+
+
+
+
+sub help{
+    print <<HELP;
+Usage: getCenteredSig.pl -a <alignfile> -c <centerfile> -o <output> -e [extend bp] -w [window size] -n/-non
+                -a  alignment file in bed format
+                -c  center position file, format is "chr    pos"
+                -o  output file name
+                -e  extend length around the center, extend by upstream extend/2 bp and downstream extend/2bp, default 8000bp
+                -w  window size to get the signal, default is 10,(1 means get the average coverage for each base around the extended region)
+                -n  normalized the signal to RPKM or use the raw count, values is 0 or 1
+                -h  display this help message
+HELP
+    exit(1) if (shift @_);
+}
+
+
+sub info{
+    my $str=shift;
+    print "[",scalar(localtime),"] $str \n";
+}
+
+
+
