@@ -14,13 +14,14 @@ use Getopt::Long;
 
 my ($alnfile,$centerfile,$output,$extend,$window,$normalized)=("","","",8000,10,1);
 my $help=0;
-
+my $iscenterbed=0;
 unless(GetOptions("a=s"=>\$alnfile,
            "c=s"=>\$centerfile,
            "o=s"=>\$output,
            "e=i"=>\$extend,
            "w=i"=>\$window,
            "n=i"=>\$normalized,
+           "b=i"=>\$iscenterbed,
            "h"=>\$help)){
     help();
     die $!;
@@ -39,7 +40,14 @@ info("Initialize the signal matrix ...");
 open(FIRST,$centerfile) or die $!;
 while(<FIRST>){
     s/\r|\n//g;
-    my($chr,$center) = split "\t";
+    my ($chr,@a) = split "\t";
+    my $center="";
+    if($iscenterbed){
+        my ($start,$end) = @a; # bed format
+        $center = int (($start+$end)/2);
+    }else{
+        $center = $a[0];
+    }
     $chr=~s/chr//g;  #remove chr
     my $extend_start = $center-$extend/2;
     my $extend_end = $extend_start+$extend;
@@ -81,7 +89,14 @@ open(PEAK,$centerfile) or die $!;
 info("Loading peakfile '$centerfile' and calculate the signal matrix");
 while(<PEAK>){
     s/\r|\n//g;
-    my($chr,$center) = split "\t";
+    my ($chr,@a) = split "\t";
+    my $center="";
+    if($iscenterbed){
+        my ($start,$end) = @a; # bed format
+        $center = int (($start+$end)/2);
+    }else{
+        $center = $a[0];
+    }
     $chr=~s/chr//g;  #remove chr
     info("Doing $index ");
    
@@ -130,6 +145,7 @@ sub help{
 Usage: getCenteredSig.pl -a <alignfile> -c <centerfile> -o <output> -e [extend bp] -w [window size] -n/-non
                 -a  alignment file in bed format
                 -c  center position file, format is "chr    pos"
+                -b  is the center input file in bed format, thus will estimate the center by (start+end)/2, defalut 0, values is 0 or 1
                 -o  output file name
                 -e  extend length around the center, extend by upstream extend/2 bp and downstream extend/2bp, default 8000bp
                 -w  window size to get the signal, default is 10,(1 means get the average coverage for each base around the extended region)
