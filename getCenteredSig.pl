@@ -14,7 +14,9 @@ use Getopt::Long;
 
 my ($alnfile,$centerfile,$output,$extend,$window,$normalized)=("","","",8000,10,1);
 my $help=0;
-my $iscenterbed=0;
+my $iscenterbed=0; # default the input center file is in format chr\tpos, if bed format, get the center by start+end/2
+my $isalnbam=0;    # default the alnment is in bed format. 
+my $readlen=36;   # default assume read length is 36bp
 unless(GetOptions("a=s"=>\$alnfile,
            "c=s"=>\$centerfile,
            "o=s"=>\$output,
@@ -22,6 +24,8 @@ unless(GetOptions("a=s"=>\$alnfile,
            "w=i"=>\$window,
            "n=i"=>\$normalized,
            "b=i"=>\$iscenterbed,
+           "bam=i"=>\$isalnbam,
+           "len=i"=>\$readlen,
            "h"=>\$help)){
     help();
     die $!;
@@ -51,7 +55,7 @@ while(<FIRST>){
     $chr=~s/chr//g;  #remove chr
     my $extend_start = $center-$extend/2;
     my $extend_end = $extend_start+$extend;
-    
+ 
     # using a 10bp window to get the signal for each of this 10bp region across the 8kb region.
     for(my $i=$extend_start;$i<$extend_end;$i++){
         #calculate the signal
@@ -62,25 +66,53 @@ close FIRST;
 
 #Load alignment
 info("Load alignment");
-open(IN,"$alnfile") or die $!;
 my $totalreads=0;
+my $flag_read_unmapped = 0x0004;
 
-while(<IN>){
-    s/\r|\n//g;
-    $totalreads++;
-    unless($totalreads %10000){
-        info("Reading $totalreads");
+if($isalnbam){
+    if($alnfile=~/bam$/i){
+        open(IN,"samtools view $alnfile |") or die $!;        
+    }else{
+        open(IN,"$alnfile") or die $!;
     }
+    while(<IN>){
+        next if (/^@/);
+        my($rname,$flag,$chr,$pos,$mapQ,$cigar,@others) = split "\t";
+        next if ($flag & $flag_read_unmapped);
+        $totalreads++;
+
+        unless($totalreads %10000){
+            info("Reading $totalreads");
+        }
+
+        $chr=~s/chr//g;  #remove chr
+        my $start = $pos;
+        my $end = $start+$readlen;
+#        ($start,$end)=sort {$a<=>$b} ($start,$end); #in case $end < $start
+        for (my $i=$start;$i<=$end;$i++){
+            $aln{$chr}->{$i}++ if(exists($aln{$chr}->{$i}));  #the depth for each base
+        }
+    }
+}else{
+    # alignment is in bed format
+    open(IN,"$alnfile") or die $!;
+
+    while(<IN>){
+        s/\r|\n//g;
+        $totalreads++;
+        unless($totalreads %10000){
+            info("Reading $totalreads");
+        }
     
-    my($chr,$start,$end) = split "\t";
-    $chr=~s/chr//g;  #remove chr
-    ($start,$end)=sort {$a<=>$b} ($start,$end); #in case $end < $start
-    for (my $i=$start;$i<=$end;$i++){
-        $aln{$chr}->{$i}++ if(exists($aln{$chr}->{$i}));  #the depth for each base
+        my($chr,$start,$end) = split "\t";
+        $chr=~s/chr//g;  #remove chr
+        ($start,$end)=sort {$a<=>$b} ($start,$end); #in case $end < $start
+        for (my $i=$start;$i<=$end;$i++){
+            $aln{$chr}->{$i}++ if(exists($aln{$chr}->{$i}));  #the depth for each base
+        }
     }
+    close IN;
 }
-close IN;
-
 
 # read the peak region
 my @signal;
@@ -150,6 +182,8 @@ Usage: getCenteredSig.pl -a <alignfile> -c <centerfile> -o <output> -e [extend b
                 -e  extend length around the center, extend by upstream extend/2 bp and downstream extend/2bp, default 8000bp
                 -w  window size to get the signal, default is 10,(1 means get the average coverage for each base around the extended region)
                 -n  normalized the signal to RPKM or use the raw count, values is 0 or 1
+                -bam whether input alignment file is in bam/sam format, values is 0 or 1,default 0
+                -len the average read length, default is 36
                 -h  display this help message
 HELP
     exit(1) if (shift @_);
