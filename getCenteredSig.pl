@@ -81,7 +81,7 @@ if($isalnbam){
         next if ($flag & $flag_read_unmapped);
         $totalreads++;
 
-        unless($totalreads %10000){
+        unless($totalreads %100000){
             info("Reading $totalreads");
         }
 
@@ -100,7 +100,7 @@ if($isalnbam){
     while(<IN>){
         s/\r|\n//g;
         $totalreads++;
-        unless($totalreads %10000){
+        unless($totalreads %100000){
             info("Reading $totalreads");
         }
     
