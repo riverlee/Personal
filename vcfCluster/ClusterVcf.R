@@ -19,7 +19,7 @@ outfile=args[2]
 
 # Read file
 dat<-read.table(infile,sep="\t",comment.char="",header=TRUE)
-rownames(dat)<-paste(dat[,1],dat[,2],sep="_")
+#rownames(dat)<-paste(dat[,1],dat[,2],sep="_")
 #only genotype
 dat<-dat[,6:ncol(dat)]
 
