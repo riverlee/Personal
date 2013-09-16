@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# if no input
+if [ $# -eq 0 ];then
+    echo Usage: bammapped in.bam
+    exit 1
+fi
+
+#Get input 
+if [ -e $1 ] && [ -e $1.bai ]; then
+   samtools idxstats $1 |  awk 'BEGIN{t=0;u=0}{t=t+$3;u=u+$4}END{print t,u}'
+else
+    echo Neither $1 nor $1.bai exists
+fi
