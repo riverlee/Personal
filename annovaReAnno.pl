@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 ###################################
 # Author: Jiang Li
-# Email: riverlee2008@gmail.com
+# Emaii: riverlee2008@gmail.com
 # Date: Mon Aug  5 10:53:42 2013
 ###################################
 use strict;
